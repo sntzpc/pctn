@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Expense Tracker - Pencatat Pengeluaran Keluarga</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon alternate" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64'%3E%3Ctext y='54' x='6' font-size='56'%3E💵%3C/text%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1><i class="fas fa-wallet"></i> Pencatatan Pengeluaran Keluarga</h1>
+            <p>Catat pengeluaran dengan mudah menggunakan rekaman suara</p>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Sidebar -->
+            <aside class="sidebar">
+                <nav class="nav-menu">
+                    <ul>
+                        <li><a href="#dashboard" class="active" id="nav-dashboard"><i class="fas fa-chart-pie"></i> Dashboard</a></li>
+                        <li><a href="#input" id="nav-input"><i class="fas fa-microphone"></i> Input Suara</a></li>
+                        <li><a href="#manual" id="nav-manual"><i class="fas fa-keyboard"></i> Input Manual</a></li>
+                        <li><a href="#data" id="nav-data"><i class="fas fa-list"></i> Data Pengeluaran</a></li>
+                        <li><a href="#export" id="nav-export"><i class="fas fa-file-export"></i> Export Data</a></li>
+                    </ul>
+                </nav>
+                
+                <div class="month-summary">
+                    <h3><i class="fas fa-calendar-alt"></i> Ringkasan Bulan Ini</h3>
+                    <div class="summary-item">
+                        <span>Total Pengeluaran</span>
+                        <span id="month-total">Rp 0</span>
+                    </div>
+                    <div class="summary-item">
+                        <span>Jumlah Transaksi</span>
+                        <span id="month-count">0</span>
+                    </div>
+                    <div class="summary-item">
+                        <span>Rata-rata per Hari</span>
+                        <span id="month-avg">Rp 0</span>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Content Area -->
+            <main class="content-area">
+                <!-- Dashboard Section -->
+                <section id="dashboard" class="content-section active">
+                    <h2><i class="fas fa-chart-pie"></i> Dashboard Laporan</h2>
+                    <div class="dashboard-cards">
+                        <div class="card">
+                            <div class="card-icon" style="background-color: #4e73df;">
+                                <i class="fas fa-money-bill-wave"></i>
+                            </div>
+                            <div class="card-info">
+                                <h3>Total Pengeluaran</h3>
+                                <p id="total-expense">Rp 0</p>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <div class="card-icon" style="background-color: #1cc88a;">
+                                <i class="fas fa-shopping-cart"></i>
+                            </div>
+                            <div class="card-info">
+                                <h3>Total Transaksi</h3>
+                                <p id="total-transactions">0</p>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <div class="card-icon" style="background-color: #f6c23e;">
+                                <i class="fas fa-store"></i>
+                            </div>
+                            <div class="card-info">
+                                <h3>Toko Favorit</h3>
+                                <p id="top-store">-</p>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <div class="card-icon" style="background-color: #e74a3b;">
+                                <i class="fas fa-tags"></i>
+                            </div>
+                            <div class="card-info">
+                                <h3>Kategori Terbesar</h3>
+                                <p id="top-category">-</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="charts-container">
+                        <div class="chart-box">
+                            <h3>Pengeluaran Harian (7 Hari Terakhir)</h3>
+                            <canvas id="daily-chart"></canvas>
+                        </div>
+                        <div class="chart-box">
+                            <h3>Pengeluaran per Kategori</h3>
+                            <canvas id="category-chart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <div class="recent-transactions">
+                        <h3>Transaksi Terbaru</h3>
+                        <div class="table-container">
+                            <table id="recent-table">
+                                <thead>
+                                    <tr>
+                                        <th>Tanggal</th>
+                                        <th>Nama Barang</th>
+                                        <th>Jumlah</th>
+                                        <th>Harga Total</th>
+                                        <th>Toko</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="recent-table-body">
+                                    <tr><td colspan="5" class="empty-data">Memuat data...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Voice Input Section -->
+                <section id="input" class="content-section">
+                    <h2><i class="fas fa-microphone"></i> Input dengan Rekaman Suara</h2>
+                    <div class="voice-input-container">
+                        <div class="instructions">
+                            <h3><i class="fas fa-info-circle"></i> Cara Penggunaan</h3>
+                            <p>Ucapkan pembelian dengan format seperti contoh berikut:</p>
+                            <div class="example">
+                                <p>"Beli <strong>Handphone</strong> sebanyak <strong>1 unit</strong> merk <strong>Iphone</strong> seharga <strong>23 juta 500 ribu rupiah</strong> di toko <strong>Eraphone</strong>."</p>
+                            </div>
+                            <p>Atau:</p>
+                            <div class="example">
+                                <p>"Beli <strong>Beras</strong> sebanyak <strong>5 kilogram</strong> merk <strong>Bunga Wangi</strong> seharga <strong>75 ribu rupiah</strong> di <strong>Supermarket Indogrosir</strong>."</p>
+                            </div>
+                        </div>
+                        
+                        <div class="voice-recorder">
+                            <div class="recorder-status" id="recorder-status">
+                                <i class="fas fa-microphone"></i>
+                                <p>Siap merekam</p>
+                            </div>
+                            
+                            <button id="record-btn" class="record-btn">
+                                <i class="fas fa-microphone"></i> Mulai Rekam
+                            </button>
+                            
+                            <button id="stop-btn" class="stop-btn" disabled>
+                                <i class="fas fa-stop"></i> Berhenti
+                            </button>
+                            
+                            <button id="process-btn" class="process-btn" disabled>
+                                <i class="fas fa-brain"></i> Proses dengan AI
+                            </button>
+                            
+                            <div class="audio-preview" id="audio-preview">
+                                <p>Belum ada rekaman</p>
+                            </div>
+                        </div>
+                        
+                        <div class="transcription-result">
+                            <h3><i class="fas fa-file-alt"></i> Hasil Transkripsi</h3>
+                            <div class="result-box" id="transcription-result">
+                                <p>Hasil transkripsi akan muncul di sini...</p>
+                            </div>
+                            
+                            <h3><i class="fas fa-database"></i> Data yang Akan Disimpan</h3>
+                            <div class="data-form">
+                                <div class="form-group">
+                                    <label for="item-name">Nama Barang</label>
+                                    <input type="text" id="item-name" placeholder="Contoh: Handphone">
+                                </div>
+                                
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="item-quantity">Jumlah Barang</label>
+                                        <input type="number" id="item-quantity" placeholder="Contoh: 1" min="1">
+                                    </div>
+                                    
+                                    <div class="form-group">
+                                        <label for="item-unit">Satuan</label>
+                                        <input type="text" id="item-unit" placeholder="Contoh: Unit">
+                                    </div>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label for="item-brand">Merk</label>
+                                    <input type="text" id="item-brand" placeholder="Contoh: Iphone">
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label for="item-price">Harga Satuan</label>
+                                    <input type="text" id="item-price" placeholder="Contoh: 23500000">
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label for="item-store">Toko/Tempat Pembelian</label>
+                                    <input type="text" id="item-store" placeholder="Contoh: Eraphone">
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label for="item-category">Kategori</label>
+                                    <select id="item-category">
+                                        <option value="Makanan & Minuman">Makanan & Minuman</option>
+                                        <option value="Elektronik">Elektronik</option>
+                                        <option value="Pakaian & Aksesoris">Pakaian & Aksesoris</option>
+                                        <option value="Rumah Tangga">Rumah Tangga</option>
+                                        <option value="Kesehatan">Kesehatan</option>
+                                        <option value="Transportasi">Transportasi</option>
+                                        <option value="Hiburan">Hiburan</option>
+                                        <option value="Lainnya">Lainnya</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label for="total-price">Total Harga (Otomatis)</label>
+                                    <input type="text" id="total-price" readonly placeholder="Akan terhitung otomatis">
+                                </div>
+                                
+                                <div class="form-actions">
+                                    <button id="save-btn" class="save-btn">
+                                        <i class="fas fa-save"></i> Simpan Data
+                                    </button>
+                                    <button id="clear-btn" class="clear-btn">
+                                        <i class="fas fa-trash"></i> Bersihkan
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Manual Input Section -->
+                <section id="manual" class="content-section">
+                    <h2><i class="fas fa-keyboard"></i> Input Manual Data Pengeluaran</h2>
+                    <div class="manual-form-container">
+                        <form id="manual-form">
+                            <div class="form-group">
+                                <label for="manual-item-name">Nama Barang *</label>
+                                <input type="text" id="manual-item-name" required placeholder="Contoh: Handphone">
+                            </div>
+                            
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="manual-item-quantity">Jumlah Barang *</label>
+                                    <input type="number" id="manual-item-quantity" required placeholder="Contoh: 1" min="1">
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label for="manual-item-unit">Satuan *</label>
+                                    <input type="text" id="manual-item-unit" required placeholder="Contoh: Unit">
+                                </div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="manual-item-brand">Merk</label>
+                                <input type="text" id="manual-item-brand" placeholder="Contoh: Iphone">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="manual-item-price">Harga Satuan *</label>
+                                <input type="number" id="manual-item-price" required placeholder="Contoh: 23500000" min="1">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="manual-total-price">Total Harga</label>
+                                <input type="text" id="manual-total-price" readonly placeholder="Akan terhitung otomatis">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="manual-item-store">Toko/Tempat Pembelian</label>
+                                <input type="text" id="manual-item-store" placeholder="Contoh: Eraphone">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="manual-item-category">Kategori *</label>
+                                <select id="manual-item-category" required>
+                                    <option value="">Pilih Kategori</option>
+                                    <option value="Makanan & Minuman">Makanan & Minuman</option>
+                                    <option value="Elektronik">Elektronik</option>
+                                    <option value="Pakaian & Aksesoris">Pakaian & Aksesoris</option>
+                                    <option value="Rumah Tangga">Rumah Tangga</option>
+                                    <option value="Kesehatan">Kesehatan</option>
+                                    <option value="Transportasi">Transportasi</option>
+                                    <option value="Hiburan">Hiburan</option>
+                                    <option value="Lainnya">Lainnya</option>
+                                </select>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="manual-date">Tanggal Pembelian</label>
+                                <input type="date" id="manual-date">
+                            </div>
+                            
+                            <div class="form-actions">
+                                <button type="submit" class="save-btn">
+                                    <i class="fas fa-save"></i> Simpan Data
+                                </button>
+                                <button type="reset" class="clear-btn">
+                                    <i class="fas fa-trash"></i> Bersihkan Form
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </section>
+
+                <!-- Data Pengeluaran Section -->
+                <section id="data" class="content-section">
+                    <h2><i class="fas fa-list"></i> Data Pengeluaran</h2>
+                    <div class="data-controls">
+                        <div class="filter-group">
+                            <label for="filter-month">Filter Bulan:</label>
+                            <select id="filter-month">
+                                <option value="all">Semua Bulan</option>
+                                <option value="1">Januari</option>
+                                <option value="2">Februari</option>
+                                <option value="3">Maret</option>
+                                <option value="4">April</option>
+                                <option value="5">Mei</option>
+                                <option value="6">Juni</option>
+                                <option value="7">Juli</option>
+                                <option value="8">Agustus</option>
+                                <option value="9">September</option>
+                                <option value="10">Oktober</option>
+                                <option value="11">November</option>
+                                <option value="12">Desember</option>
+                            </select>
+                            
+                            <label for="filter-year">Tahun:</label>
+                            <select id="filter-year">
+                                <option value="2023">2023</option>
+                                <option value="2024" selected>2024</option>
+                                <option value="2025">2025</option>
+                            </select>
+                            
+                            <label for="filter-category">Kategori:</label>
+                            <select id="filter-category">
+                                <option value="all">Semua Kategori</option>
+                                <option value="Makanan & Minuman">Makanan & Minuman</option>
+                                <option value="Elektronik">Elektronik</option>
+                                <option value="Pakaian & Aksesoris">Pakaian & Aksesoris</option>
+                                <option value="Rumah Tangga">Rumah Tangga</option>
+                                <option value="Kesehatan">Kesehatan</option>
+                                <option value="Transportasi">Transportasi</option>
+                                <option value="Hiburan">Hiburan</option>
+                                <option value="Lainnya">Lainnya</option>
+                            </select>
+                            
+                            <button id="apply-filter" class="filter-btn">
+                                <i class="fas fa-filter"></i> Terapkan Filter
+                            </button>
+                            <button id="reset-filter" class="clear-btn">
+                                <i class="fas fa-redo"></i> Reset
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="table-container">
+                        <table id="expense-table">
+                            <thead>
+                                <tr>
+                                    <th>No</th>
+                                    <th>Tanggal</th>
+                                    <th>Nama Barang</th>
+                                    <th>Jumlah</th>
+                                    <th>Satuan</th>
+                                    <th>Merk</th>
+                                    <th>Harga Satuan</th>
+                                    <th>Total Harga</th>
+                                    <th>Kategori</th>
+                                    <th>Toko</th>
+                                    <th>Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="expense-table-body">
+                                <tr><td colspan="11" class="empty-data">Memuat data...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div class="pagination">
+                        <button id="prev-page" disabled><i class="fas fa-chevron-left"></i></button>
+                        <span id="page-info">Halaman 1 dari 1</span>
+                        <button id="next-page" disabled><i class="fas fa-chevron-right"></i></button>
+                    </div>
+                </section>
+
+                <!-- Export Data Section -->
+                <section id="export" class="content-section">
+                    <h2><i class="fas fa-file-export"></i> Export Data ke Excel</h2>
+                    <div class="export-container">
+                        <div class="export-options">
+                            <div class="option-card">
+                                <div class="option-icon">
+                                    <i class="fas fa-calendar-alt"></i>
+                                </div>
+                                <h3>Export Berdasarkan Periode</h3>
+                                <p>Export data pengeluaran berdasarkan rentang tanggal tertentu</p>
+                                
+                                <div class="date-range">
+                                    <div class="form-group">
+                                        <label for="export-start">Tanggal Mulai</label>
+                                        <input type="date" id="export-start">
+                                    </div>
+                                    
+                                    <div class="form-group">
+                                        <label for="export-end">Tanggal Akhir</label>
+                                        <input type="date" id="export-end">
+                                    </div>
+                                </div>
+                                
+                                <button id="export-period" class="export-btn">
+                                    <i class="fas fa-download"></i> Export Periode
+                                </button>
+                            </div>
+                            
+                            <div class="option-card">
+                                <div class="option-icon">
+                                    <i class="fas fa-filter"></i>
+                                </div>
+                                <h3>Export dengan Filter</h3>
+                                <p>Export data berdasarkan kategori, toko, atau filter lainnya</p>
+                                
+                                <div class="export-filters">
+                                    <div class="form-group">
+                                        <label for="export-category">Kategori</label>
+                                        <select id="export-category">
+                                            <option value="all">Semua Kategori</option>
+                                            <option value="Makanan & Minuman">Makanan & Minuman</option>
+                                            <option value="Elektronik">Elektronik</option>
+                                            <option value="Pakaian & Aksesoris">Pakaian & Aksesoris</option>
+                                            <option value="Rumah Tangga">Rumah Tangga</option>
+                                            <option value="Kesehatan">Kesehatan</option>
+                                            <option value="Transportasi">Transportasi</option>
+                                            <option value="Hiburan">Hiburan</option>
+                                            <option value="Lainnya">Lainnya</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div class="form-group">
+                                        <label for="export-store">Toko</label>
+                                        <input type="text" id="export-store" placeholder="Nama toko (kosongkan untuk semua)">
+                                    </div>
+                                </div>
+                                
+                                <button id="export-filtered" class="export-btn">
+                                    <i class="fas fa-download"></i> Export Filter
+                                </button>
+                            </div>
+                            
+                            <div class="option-card">
+                                <div class="option-icon">
+                                    <i class="fas fa-file-excel"></i>
+                                </div>
+                                <h3>Export Semua Data</h3>
+                                <p>Export semua data pengeluaran ke file Excel</p>
+                                <p class="note">Catatan: Semua data dalam spreadsheet akan di-export</p>
+                                
+                                <button id="export-all" class="export-btn">
+                                    <i class="fas fa-download"></i> Export Semua Data
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="export-status">
+                            <h3><i class="fas fa-history"></i> Status Export</h3>
+                            <div id="export-result">
+                                <p>Belum ada export yang dilakukan</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </main>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Aplikasi Pencatatan Pengeluaran Keluarga &copy; 2024 | Dibuat dengan <i class="fas fa-heart"></i> untuk keluarga Indonesia</p>
+        </footer>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast">
+        <div class="toast-content">
+            <i class="fas fa-check-circle toast-icon"></i>
+            <div class="toast-message">Data berhasil disimpan!</div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading" class="loading-overlay">
+        <div class="loading-spinner"></div>
+        <p>Memproses...</p>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
