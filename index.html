@@ -17,8 +17,8 @@
         <header class="header">
             <div class="header-row">
                 <div class="header-left">
-                    <h1><i class="fas fa-wallet"></i> Pencatatan Pengeluaran Keluarga</h1>
-                    <p>Catat pengeluaran dengan mudah menggunakan rekaman suara</p>
+                    <h1><i class="fas fa-wallet"></i> Expense Tracker</h1>
+                    <p>Catat pengeluaran dengan mudah menggunakan suara dan struk</p>
                 </div>
 
                 <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Ubah tema">
@@ -35,7 +35,9 @@
                 <nav class="nav-menu">
                     <ul>
                         <li><a href="#dashboard" class="active" id="nav-dashboard"><i class="fas fa-chart-pie"></i> Dashboard</a></li>
+                        <li><a href="#stats" id="nav-stats"><i class="fas fa-chart-line"></i> Statistik</a></li>
                         <li><a href="#input" id="nav-input"><i class="fas fa-microphone"></i> Input Suara</a></li>
+                        <li><a href="#receipt" id="nav-receipt"><i class="fas fa-receipt"></i> Input Struk</a></li>
                         <li><a href="#manual" id="nav-manual"><i class="fas fa-keyboard"></i> Input Manual</a></li>
                         <li><a href="#data" id="nav-data"><i class="fas fa-list"></i> Data Pengeluaran</a></li>
                         <li><a href="#export" id="nav-export"><i class="fas fa-file-export"></i> Export Data</a></li>
@@ -174,6 +176,114 @@
                     </div>
                 </section>
 
+                <!-- Statistik Section -->
+                <section id="stats" class="content-section">
+                <h2><i class="fas fa-chart-line"></i> Statistik & Analisa</h2>
+
+                <div class="stats-toolbar">
+                    <div class="stats-filter">
+                    <label for="stats-range">Periode</label>
+                    <select id="stats-range" class="chart-select">
+                        <option value="today">Hari ini</option>
+                        <option value="7d" selected>7 hari terkini</option>
+                        <option value="30d">30 hari terkini</option>
+                        <option value="1y">1 tahun terkini</option>
+                        <option value="all">Semua data</option>
+                    </select>
+                    </div>
+
+                    <div class="stats-filter">
+                    <label for="stats-search">Cari barang / toko</label>
+                    <input id="stats-search" type="text" placeholder="contoh: beras, indomaret, bensin..." />
+                    </div>
+                </div>
+
+                <div class="stats-cards">
+                    <div class="stat-card">
+                    <div class="stat-title">Total Pengeluaran</div>
+                    <div class="stat-value" id="stat-total">Rp 0</div>
+                    <div class="stat-sub" id="stat-total-sub">Periode terpilih</div>
+                    </div>
+
+                    <div class="stat-card">
+                    <div class="stat-title">Jumlah Transaksi</div>
+                    <div class="stat-value" id="stat-tx">0</div>
+                    <div class="stat-sub">Periode terpilih</div>
+                    </div>
+
+                    <div class="stat-card">
+                    <div class="stat-title">Rata-rata / Transaksi</div>
+                    <div class="stat-value" id="stat-avg-tx">Rp 0</div>
+                    <div class="stat-sub">Periode terpilih</div>
+                    </div>
+
+                    <div class="stat-card">
+                    <div class="stat-title">Hari Paling Boros</div>
+                    <div class="stat-value" id="stat-top-day">-</div>
+                    <div class="stat-sub" id="stat-top-day-sub">Rp 0</div>
+                    </div>
+
+                    <div class="stat-card">
+                    <div class="stat-title">Barang Terbanyak</div>
+                    <div class="stat-value" id="stat-top-item">-</div>
+                    <div class="stat-sub" id="stat-top-item-sub">0 item</div>
+                    </div>
+
+                    <div class="stat-card">
+                    <div class="stat-title">Barang Paling Boros</div>
+                    <div class="stat-value" id="stat-top-spend-item">-</div>
+                    <div class="stat-sub" id="stat-top-spend-item-sub">Rp 0</div>
+                    </div>
+                </div>
+
+                <div class="stats-panels">
+                    <div class="chart-box">
+                    <div class="chart-head">
+                        <h3>Top 10 Barang Paling Boros</h3>
+                    </div>
+                    <canvas id="stats-topitems-chart"></canvas>
+                    </div>
+
+                    <div class="chart-box">
+                    <div class="chart-head">
+                        <h3>Pengeluaran per Hari (Senin–Minggu)</h3>
+                    </div>
+                    <canvas id="stats-weekday-chart"></canvas>
+                    </div>
+
+                    <div class="chart-box">
+                    <div class="chart-head">
+                        <h3>Tren Bulanan</h3>
+                    </div>
+                    <canvas id="stats-monthly-chart"></canvas>
+                    </div>
+
+                    <div class="chart-box">
+                    <div class="chart-head">
+                        <h3>Daftar Top Barang</h3>
+                    </div>
+
+                    <div class="table-container table-scroll">
+                        <table>
+                        <thead>
+                            <tr>
+                            <th>Rank</th>
+                            <th>Barang</th>
+                            <th style="text-align:right;">Qty</th>
+                            <th style="text-align:right;">Total Belanja</th>
+                            <th>Toko Terbanyak</th>
+                            </tr>
+                        </thead>
+                        <tbody id="stats-topitems-body">
+                            <tr><td colspan="5" class="empty-data">Memuat...</td></tr>
+                        </tbody>
+                        </table>
+                    </div>
+                    <div class="small" id="stats-note" style="margin-top:10px;color:#6e707e;">-</div>
+                    </div>
+                </div>
+                </section>
+
                 <!-- Voice Input Section -->
                 <section id="input" class="content-section">
                     <h2><i class="fas fa-microphone"></i> Input dengan Rekaman Suara</h2>
@@ -285,23 +395,44 @@
                     </div>
                 </section>
 
-                <!-- ====== Receipt (Foto Struk) ====== -->
-                <div class="card">
-                <h3>Input dari Foto Struk</h3>
+                <!-- Receipt Input Section -->
+                <section id="receipt" class="content-section">
+                <h2><i class="fas fa-receipt"></i> Input dari Foto Struk</h2>
 
-                <input id="receipt-file" type="file" accept="image/*" capture="environment" />
-                <div class="row" style="gap:8px;margin-top:10px;">
-                    <button id="receipt-process-btn" type="button" class="btn btn-primary" disabled>
-                    <i class="fas fa-magic"></i> Baca Struk (AI)
-                    </button>
-                    <button id="receipt-clear-btn" type="button" class="btn btn-light" disabled>
-                    <i class="fas fa-times"></i> Reset
-                    </button>
-                </div>
+                <div class="receipt-container">
+                    <div class="receipt-left">
+                    <div class="receipt-card">
+                        <h3><i class="fas fa-camera"></i> Ambil / Upload Foto Struk</h3>
+                        <p class="small muted">
+                        Tips: foto harus terang, tidak terpotong, dan tulisan fokus agar hasil OCR maksimal.
+                        </p>
 
-                <div id="receipt-preview" style="margin-top:10px;"></div>
-                <div id="receipt-result" style="margin-top:10px;"></div>
+                        <input id="receipt-file" class="receipt-file" type="file" accept="image/*" capture="environment" />
+
+                        <div class="receipt-actions">
+                        <button id="receipt-process-btn" type="button" class="btn btn-primary" disabled>
+                            <i class="fas fa-magic"></i> Baca Struk (AI)
+                        </button>
+
+                        <button id="receipt-clear-btn" type="button" class="btn btn-light" disabled>
+                            <i class="fas fa-times"></i> Reset
+                        </button>
+                        </div>
+
+                        <div id="receipt-preview" class="receipt-preview"></div>
+                    </div>
+                    </div>
+
+                    <div class="receipt-right">
+                    <div class="receipt-card">
+                        <h3><i class="fas fa-list-check"></i> Hasil Parsing & Pilih Item</h3>
+                        <div id="receipt-result" class="receipt-result">
+                        <p class="small muted">Belum ada struk yang diproses.</p>
+                        </div>
+                    </div>
+                    </div>
                 </div>
+                </section>
 
                 <!-- Manual Input Section -->
                 <section id="manual" class="content-section">
@@ -561,7 +692,7 @@
 
         <!-- Footer -->
         <footer class="footer">
-            <p>Aplikasi Pencatatan Pengeluaran Keluarga &copy; 2024 | Dibuat dengan <i class="fas fa-heart"></i> untuk keluarga Indonesia</p>
+            <p>Aplikasi Pencatatan Pengeluaran Keluarga &copy; 2026 | Dibuat dengan <i class="fas fa-heart"></i> untuk keluarga tercinta</p>
         </footer>
     </div>
 

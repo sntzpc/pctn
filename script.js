@@ -75,6 +75,24 @@ function initializeApp() {
         recentPageSize: document.getElementById('recent-page-size'),
         recentPagination: document.getElementById('recent-pagination'),
 
+        // Statistik
+        statsRange: document.getElementById('stats-range'),
+        statsSearch: document.getElementById('stats-search'),
+        statTotal: document.getElementById('stat-total'),
+        statTx: document.getElementById('stat-tx'),
+        statAvgTx: document.getElementById('stat-avg-tx'),
+        statTopDay: document.getElementById('stat-top-day'),
+        statTopDaySub: document.getElementById('stat-top-day-sub'),
+        statTopItem: document.getElementById('stat-top-item'),
+        statTopItemSub: document.getElementById('stat-top-item-sub'),
+        statTopSpendItem: document.getElementById('stat-top-spend-item'),
+        statTopSpendItemSub: document.getElementById('stat-top-spend-item-sub'),
+        statsTopItemsBody: document.getElementById('stats-topitems-body'),
+        statsNote: document.getElementById('stats-note'),
+        statsTopItemsChart: document.getElementById('stats-topitems-chart'),
+        statsWeekdayChart: document.getElementById('stats-weekday-chart'),
+        statsMonthlyChart: document.getElementById('stats-monthly-chart'),
+
         // Data paging
         dataPageSize: document.getElementById('data-page-size'),
         dataPagination: document.getElementById('data-pagination'),
@@ -198,6 +216,14 @@ function setupEventListeners() {
     renderRecentTable();
   });
 
+  // Statistik events
+  on(domElements.statsRange, 'change', () => renderStatistics());
+  on(domElements.statsSearch, 'input', () => {
+  // debounce ringan
+  clearTimeout(appState._statsTimer);
+    appState._statsTimer = setTimeout(renderStatistics, 250);
+    });
+
   // Voice Input Events (SAFE)
   on(domElements.recordBtn, 'click', startRecording);
   on(domElements.stopBtn, 'click', stopRecording);
@@ -253,6 +279,8 @@ function setupEventListeners() {
     appState.dailyScale = domElements.dailyScale.value || 'auto';
     updateCharts();
   });
+  window.addEventListener('resize', scheduleResizeCharts, { passive: true });
+  window.addEventListener('orientationchange', scheduleResizeCharts, { passive: true });
 }
 
 // Fungsi Navigasi
@@ -274,12 +302,17 @@ function navigateTo(pageId) {
     });
     
     appState.currentPage = pageId;
+    requestAnimationFrame(() => {
+    scheduleResizeCharts();
+  });
     
     // Load data khusus untuk halaman tertentu
     if (pageId === 'dashboard') {
         updateDashboard();
     } else if (pageId === 'data') {
         loadExpenseData();
+    } else if (pageId === 'stats') {
+        renderStatistics();
     }
 }
 
@@ -724,11 +757,39 @@ function asNumber(v, def = 0){
 }
 
 function guessCategoryFromText(name){
-  const s = String(name || '').toLowerCase();
-  if (/(kopi|teh|susu|air|minum|makan|snack|roti|mie|beras|gula|telur|ayam|daging)/.test(s)) return 'Makanan & Minuman';
-  if (/(bensin|pertalite|solar|bbm|parkir|tol|ojek|grab|gojek)/.test(s)) return 'Transportasi';
-  if (/(sabun|sampo|deterjen|pasta gigi|tisu|pewangi|pembersih)/.test(s)) return 'Rumah Tangga';
-  if (/(obat|vitamin|masker|plester)/.test(s)) return 'Kesehatan';
+  const s = String(name || '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ') // rapikan spasi OCR
+    .trim();
+
+  // Makanan & Minuman
+  if (/(kopi|teh|susu|minuman|snack|fries|nugget|racik|santan|sapi|tahu|tempe|makan|restoran|warung|nasi|mie|bakso|soto|ayam|daging|ikan|buah|sayur|beras|gula|telur|bumbu|kecap|saos|keripik|cokelat|roti|kue|martabak|donat|alfamart|indomaret|supermarket|minimarket)/.test(s))
+    return 'Makanan & Minuman';
+
+  // Transportasi
+  if (/(bensin|pertalite|pertamax|solar|bbm|spbu|parkir|tol|grab|gojek|ojek|taxi|taksi|commuter|krl|mrt|lrt|bus|angkot)/.test(s))
+    return 'Transportasi';
+
+  // Rumah Tangga
+  if (/(sabun|sampo|deterjen|pembersih|tisu|pewangi|sikat gigi|pasta gigi|odol|gas|elpiji|galon|listrik|pln|pdam|air|kebersihan)/.test(s))
+    return 'Rumah Tangga';
+
+  // Kesehatan
+  if (/(obat|apotek|vitamin|suplemen|masker|hand sanitizer|alkohol|disinfektan|rumah sakit|klinik|dokter|bpjs|kesehatan)/.test(s))
+    return 'Kesehatan';
+
+  // Pakaian & Aksesoris
+  if (/(baju|celana|kaos|kemeja|jaket|sepatu|tas|dompet|aksesoris|jam tangan|topi|sunglasses|fashion|beli baju)/.test(s))
+    return 'Pakaian & Aksesoris';
+
+  // Elektronik
+  if (/(handphone|hp|smartphone|laptop|komputer|pc|tablet|charger|kabel|earphone|headset|mouse|keyboard|monitor|tv|kamera|elektronik)/.test(s))
+    return 'Elektronik';
+
+  // Hiburan
+  if (/(netflix|spotify|youtube|disney|bioskop|nonton|film|game|playstation|steam|hobi|buku|komik|konser|tiket|nongkrong|cafe|karaoke)/.test(s))
+    return 'Hiburan';
+
   return 'Lainnya';
 }
 
@@ -1544,58 +1605,302 @@ function buildDailySeries(expenses, rangeKey){
 
 // Setup charts awal
 function setupCharts() {
-    // Chart pengeluaran harian
-    const dailyCtx = document.getElementById('daily-chart').getContext('2d');
-    appState.dailyChart = new Chart(dailyCtx, {
-        type: 'bar',
-        data: {
-            labels: [],
-            datasets: [{
-                label: 'Pengeluaran (Rp)',
-                data: [],
-                backgroundColor: 'rgba(78, 115, 223, 0.8)',
-                borderColor: 'rgba(78, 115, 223, 1)',
-                borderWidth: 1
-            }]
-        },
-        options: {
-            responsive: true,
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: {
-                        callback: function(value) {
-                            return scaleTickFormatter(appState.dailyScale || 'auto')(value);
-                        }
-                    }
-                }
+  // Chart pengeluaran harian (Dashboard)
+  const dailyCtx = document.getElementById('daily-chart').getContext('2d');
+  appState.dailyChart = new Chart(dailyCtx, {
+    type: 'bar',
+    data: {
+      labels: [],
+      datasets: [{
+        label: 'Pengeluaran (Rp)',
+        data: [],
+        backgroundColor: 'rgba(78, 115, 223, 0.8)',
+        borderColor: 'rgba(78, 115, 223, 1)',
+        borderWidth: 1
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false, // ✅ penting
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: {
+            callback: function(value) {
+              return scaleTickFormatter(appState.dailyScale || 'auto')(value);
             }
+          }
         }
-    });
-    
-    // Chart kategori
-    const categoryCtx = document.getElementById('category-chart').getContext('2d');
-    appState.categoryChart = new Chart(categoryCtx, {
-        type: 'doughnut',
-        data: {
-            labels: [],
-            datasets: [{
-                data: [],
-                backgroundColor: [
-                    '#4e73df', '#1cc88a', '#f6c23e', '#e74a3b',
-                    '#36b9cc', '#858796', '#6f42c1', '#fd7e14'
-                ]
-            }]
-        },
-        options: {
-            responsive: true,
-            plugins: {
-                legend: {
-                    position: 'bottom'
-                }
-            }
+      }
+    }
+  });
+
+  // Chart kategori (Dashboard)
+  const categoryCtx = document.getElementById('category-chart').getContext('2d');
+  appState.categoryChart = new Chart(categoryCtx, {
+    type: 'doughnut',
+    data: {
+      labels: [],
+      datasets: [{
+        data: [],
+        backgroundColor: [
+          '#4e73df', '#1cc88a', '#f6c23e', '#e74a3b',
+          '#36b9cc', '#858796', '#6f42c1', '#fd7e14'
+        ]
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false, // ✅ penting
+      plugins: { legend: { position: 'bottom' } }
+    }
+  });
+
+  // ===== Statistik Charts =====
+  if (domElements.statsTopItemsChart && domElements.statsWeekdayChart && domElements.statsMonthlyChart) {
+
+    const commonOpts = {
+      responsive: true,
+      maintainAspectRatio: false,   // ✅ kunci biar ngikut lebar container mobile
+      animation: false,
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: { callback: (v) => scaleTickFormatter('auto')(v) }
         }
+      }
+    };
+
+    const ctx1 = domElements.statsTopItemsChart.getContext('2d');
+    appState.statsTopItemsChart = new Chart(ctx1, {
+      type: 'bar',
+      data: { labels: [], datasets: [{ label: 'Total Belanja (Rp)', data: [] }] },
+      options: commonOpts
     });
+
+    const ctx2 = domElements.statsWeekdayChart.getContext('2d');
+    appState.statsWeekdayChart = new Chart(ctx2, {
+      type: 'bar',
+      data: {
+        labels: ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'],
+        datasets: [{ label: 'Pengeluaran (Rp)', data: [] }]
+      },
+      options: commonOpts
+    });
+
+    const ctx3 = domElements.statsMonthlyChart.getContext('2d');
+    appState.statsMonthlyChart = new Chart(ctx3, {
+      type: 'line',
+      data: { labels: [], datasets: [{ label: 'Total Bulanan (Rp)', data: [] }] },
+      options: commonOpts
+    });
+  }
+}
+
+// ===========================
+// CHART RESIZE FIX (hidden -> visible)
+// ===========================
+function resizeAllCharts(){
+  const charts = [
+    appState.dailyChart,
+    appState.categoryChart,
+    appState.statsTopItemsChart,
+    appState.statsWeekdayChart,
+    appState.statsMonthlyChart
+  ].filter(Boolean);
+
+  charts.forEach(ch => {
+    try { ch.resize(); } catch(e) {}
+  });
+}
+
+// debounce ringan untuk resize window
+let _chartResizeTimer = null;
+function scheduleResizeCharts(){
+  clearTimeout(_chartResizeTimer);
+  _chartResizeTimer = setTimeout(() => resizeAllCharts(), 80);
+}
+
+function getExpensesByRange(rangeKey){
+  const arr = Array.isArray(appState.expenses) ? appState.expenses : [];
+  const today = startOfDay(new Date());
+  const todayISO = toISODateLocal(today);
+
+  let startISO = null;
+
+  if (rangeKey === 'today') startISO = todayISO;
+  if (rangeKey === '7d') {
+    const s = new Date(today); s.setDate(s.getDate() - 6);
+    startISO = toISODateLocal(s);
+  }
+  if (rangeKey === '30d') {
+    const s = new Date(today); s.setDate(s.getDate() - 29);
+    startISO = toISODateLocal(s);
+  }
+  if (rangeKey === '1y') {
+    const s = new Date(today); s.setMonth(s.getMonth() - 11);
+    startISO = toISODateLocal(new Date(s.getFullYear(), s.getMonth(), 1));
+  }
+
+  // all => null startISO
+  return arr.filter(e => {
+    const iso = normalizeToISODate(e.tanggal);
+    if (!iso) return false;
+    if (startISO && iso < startISO) return false;
+    if (rangeKey === 'today') return iso === todayISO;
+    return true;
+  });
+}
+
+function normalizeKey(s){
+  return String(s || '').toLowerCase().trim().replace(/\s+/g,' ');
+}
+
+function weekdayIndexFromISO(iso){
+  // iso: YYYY-MM-DD -> Date lokal
+  const d = new Date(iso + 'T00:00:00');
+  // JS: 0=Min..6=Sab => ubah jadi 0=Sen..6=Min
+  const js = d.getDay();
+  return (js === 0) ? 6 : (js - 1);
+}
+
+function renderStatistics(){
+  // guard: kalau element statistik belum ada
+  if (!domElements.statTotal || !domElements.statsTopItemsBody) return;
+
+  const rangeKey = domElements.statsRange?.value || '7d';
+  const q = normalizeKey(domElements.statsSearch?.value || '');
+
+  let data = getExpensesByRange(rangeKey);
+
+  // optional search filter (barang/toko)
+  if (q) {
+    data = data.filter(e => {
+      const nm = normalizeKey(e.nama_barang);
+      const tk = normalizeKey(e.toko);
+      return nm.includes(q) || tk.includes(q);
+    });
+  }
+
+  // ==== KPI cards ====
+  const total = data.reduce((s, e) => s + (Number(e.harga_total) || 0), 0);
+  const tx = data.length;
+  const avgTx = tx ? (total / tx) : 0;
+
+  domElements.statTotal.textContent = formatCurrency(total);
+  domElements.statTx.textContent = String(tx);
+  domElements.statAvgTx.textContent = formatCurrency(avgTx);
+
+  // ==== Top day ====
+  const dayBuckets = {}; // iso->total
+  for (const e of data){
+    const iso = normalizeToISODate(e.tanggal);
+    if (!iso) continue;
+    dayBuckets[iso] = (dayBuckets[iso] || 0) + (Number(e.harga_total) || 0);
+  }
+  const topDayISO = Object.keys(dayBuckets).sort((a,b)=> (dayBuckets[b]-dayBuckets[a]))[0];
+  if (topDayISO){
+    domElements.statTopDay.textContent = formatDate(topDayISO);
+    domElements.statTopDaySub.textContent = formatCurrency(dayBuckets[topDayISO] || 0);
+  } else {
+    domElements.statTopDay.textContent = '-';
+    domElements.statTopDaySub.textContent = 'Rp 0';
+  }
+
+  // ==== Group by item ====
+  const itemAgg = {}; // key -> {name, qty, spend, storeCount{}}
+  for (const e of data){
+    const name = String(e.nama_barang || '').trim();
+    const key = normalizeKey(name);
+    if (!key) continue;
+
+    const qty = Number(e.jumlah) || 0;
+    const spend = Number(e.harga_total) || 0;
+    const store = String(e.toko || '').trim() || 'Tidak diketahui';
+
+    if (!itemAgg[key]) itemAgg[key] = { name, qty:0, spend:0, storeCount:{} };
+    itemAgg[key].qty += qty;
+    itemAgg[key].spend += spend;
+    itemAgg[key].storeCount[store] = (itemAgg[key].storeCount[store] || 0) + 1;
+  }
+
+  const items = Object.values(itemAgg);
+  items.sort((a,b) => b.spend - a.spend);
+
+  // Top spend item
+  const topSpend = items[0];
+  if (topSpend){
+    domElements.statTopSpendItem.textContent = topSpend.name;
+    domElements.statTopSpendItemSub.textContent = formatCurrency(topSpend.spend);
+  } else {
+    domElements.statTopSpendItem.textContent = '-';
+    domElements.statTopSpendItemSub.textContent = 'Rp 0';
+  }
+
+  // Top qty item (barang terbanyak)
+  const topQty = [...items].sort((a,b)=> b.qty - a.qty)[0];
+  if (topQty){
+    domElements.statTopItem.textContent = topQty.name;
+    domElements.statTopItemSub.textContent = `${topQty.qty} item`;
+  } else {
+    domElements.statTopItem.textContent = '-';
+    domElements.statTopItemSub.textContent = '0 item';
+  }
+
+  // ==== Table Top Items ====
+  const topN = items.slice(0, 20);
+  if (topN.length === 0){
+    domElements.statsTopItemsBody.innerHTML = `<tr><td colspan="5" class="empty-data">Tidak ada data pada periode ini</td></tr>`;
+  } else {
+    domElements.statsTopItemsBody.innerHTML = topN.map((it, i) => {
+      const topStore = Object.keys(it.storeCount).sort((a,b)=>it.storeCount[b]-it.storeCount[a])[0] || '-';
+      return `
+        <tr>
+          <td>${i+1}</td>
+          <td>${escapeHtml(it.name)}</td>
+          <td style="text-align:right;">${Number(it.qty || 0)}</td>
+          <td style="text-align:right;"><b>${formatCurrency(Number(it.spend || 0))}</b></td>
+          <td>${escapeHtml(topStore)}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  if (domElements.statsNote){
+    domElements.statsNote.textContent = q
+      ? `Filter pencarian aktif: "${domElements.statsSearch.value}". Data yang dianalisa: ${tx} transaksi.`
+      : `Data yang dianalisa: ${tx} transaksi.`;
+  }
+
+  // ==== Charts ====
+  // 1) Top 10 spend items
+  if (appState.statsTopItemsChart){
+    const top10 = items.slice(0, 10);
+    appState.statsTopItemsChart.data.labels = top10.map(x => x.name);
+    appState.statsTopItemsChart.data.datasets[0].data = top10.map(x => Number(x.spend || 0));
+    appState.statsTopItemsChart.update();
+  }
+
+  // 2) Weekday spend
+  if (appState.statsWeekdayChart){
+    const wd = [0,0,0,0,0,0,0]; // Sen..Min
+    for (const e of data){
+      const iso = normalizeToISODate(e.tanggal);
+      if (!iso) continue;
+      const idx = weekdayIndexFromISO(iso);
+      wd[idx] += (Number(e.harga_total) || 0);
+    }
+    appState.statsWeekdayChart.data.datasets[0].data = wd.map(v => Number(v||0));
+    appState.statsWeekdayChart.update();
+  }
+
+  // 3) Monthly trend (gunakan buildDailySeries monthly aggregation)
+  if (appState.statsMonthlyChart){
+    const series = buildDailySeries(data, 'all'); // monthly aggregation
+    appState.statsMonthlyChart.data.labels = series.labels;
+    appState.statsMonthlyChart.data.datasets[0].data = series.values.map(v => Number(v||0));
+    appState.statsMonthlyChart.update();
+  }
 }
 
 // Update charts dengan data terkini (FIX: hindari recursive set di Chart.js options proxy)
@@ -1837,13 +2142,22 @@ function applyFilters() {
 
 // Fungsi untuk mereset filter
 function resetFilters() {
-    domElements.filterMonth.value = 'all';
-    domElements.filterYear.value = new Date().getFullYear().toString();
-    domElements.filterCategory.value = 'all';
-    
-    appState.filteredExpenses.sort(compareExpenseDesc);
-    appState.currentPageIndex = 1;
-    renderExpenseTable();
+  domElements.filterMonth.value = 'all';
+
+  // pilih year yang tersedia di dropdown (kalau ada), fallback tetap tahun sekarang
+  const yNow = String(new Date().getFullYear());
+  const yearSelect = domElements.filterYear;
+  if (yearSelect) {
+    const hasNow = Array.from(yearSelect.options || []).some(o => o.value === yNow);
+    yearSelect.value = hasNow ? yNow : (yearSelect.options?.[0]?.value || yNow);
+  }
+
+  domElements.filterCategory.value = 'all';
+
+  appState.filteredExpenses = [...appState.expenses];
+  appState.filteredExpenses.sort(compareExpenseDesc);
+  appState.currentPageIndex = 1;
+  renderExpenseTable();
 }
 
 // Fungsi untuk navigasi halaman
