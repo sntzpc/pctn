@@ -15,8 +15,17 @@
     <div class="container">
         <!-- Header -->
         <header class="header">
-            <h1><i class="fas fa-wallet"></i> Pencatatan Pengeluaran Keluarga</h1>
-            <p>Catat pengeluaran dengan mudah menggunakan rekaman suara</p>
+            <div class="header-row">
+                <div class="header-left">
+                    <h1><i class="fas fa-wallet"></i> Pencatatan Pengeluaran Keluarga</h1>
+                    <p>Catat pengeluaran dengan mudah menggunakan rekaman suara</p>
+                </div>
+
+                <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Ubah tema">
+                    <i class="fas fa-moon"></i>
+                    <span>Dark</span>
+                </button>
+            </div>
         </header>
 
         <!-- Main Content -->
@@ -96,9 +105,30 @@
                     
                     <div class="charts-container">
                         <div class="chart-box">
-                            <h3>Pengeluaran Harian (7 Hari Terakhir)</h3>
-                            <canvas id="daily-chart"></canvas>
+                        <div class="chart-head">
+                            <h3 id="daily-chart-title">Pengeluaran Harian (7 Hari Terakhir)</h3>
+
+                            <div class="chart-controls">
+                                <select id="daily-range" class="chart-select" title="Periode">
+                                    <option value="today">Hari ini</option>
+                                    <option value="7d" selected>7 hari terkini</option>
+                                    <option value="30d">30 hari terkini</option>
+                                    <option value="1y">1 tahun terkini</option>
+                                    <option value="all">Semua data</option>
+                                </select>
+
+                                <select id="daily-scale" class="chart-select" title="Skala">
+                                    <option value="auto" selected>Skala: Auto</option>
+                                    <option value="rp">Skala: Rupiah</option>
+                                    <option value="rb">Skala: Ribuan (Rb)</option>
+                                    <option value="jt">Skala: Jutaan (Jt)</option>
+                                    <option value="log">Skala: Log</option>
+                                </select>
+                            </div>
                         </div>
+
+                        <canvas id="daily-chart"></canvas>
+                    </div>
                         <div class="chart-box">
                             <h3>Pengeluaran per Kategori</h3>
                             <canvas id="category-chart"></canvas>
@@ -106,23 +136,41 @@
                     </div>
                     
                     <div class="recent-transactions">
+                    <div class="table-head">
                         <h3>Transaksi Terbaru</h3>
-                        <div class="table-container">
-                            <table id="recent-table">
-                                <thead>
-                                    <tr>
-                                        <th>Tanggal</th>
-                                        <th>Nama Barang</th>
-                                        <th>Jumlah</th>
-                                        <th>Harga Total</th>
-                                        <th>Toko</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="recent-table-body">
-                                    <tr><td colspan="5" class="empty-data">Memuat data...</td></tr>
-                                </tbody>
-                            </table>
+
+                        <div class="table-tools">
+                        <label class="table-tool">
+                            Tampil
+                            <select id="recent-page-size" class="table-select">
+                            <option value="20" selected>20</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                            <option value="1000">1000</option>
+                            </select>
+                            data
+                        </label>
                         </div>
+                    </div>
+
+                    <div class="table-container table-scroll">
+                        <table id="recent-table">
+                        <thead>
+                            <tr>
+                            <th>Tanggal</th>
+                            <th>Nama Barang</th>
+                            <th>Jumlah</th>
+                            <th>Harga Total</th>
+                            <th>Toko</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recent-table-body">
+                            <tr><td colspan="5" class="empty-data">Memuat data...</td></tr>
+                        </tbody>
+                        </table>
+                    </div>
+
+                    <div class="pagination" id="recent-pagination"></div>
                     </div>
                 </section>
 
@@ -236,6 +284,24 @@
                         </div>
                     </div>
                 </section>
+
+                <!-- ====== Receipt (Foto Struk) ====== -->
+                <div class="card">
+                <h3>Input dari Foto Struk</h3>
+
+                <input id="receipt-file" type="file" accept="image/*" capture="environment" />
+                <div class="row" style="gap:8px;margin-top:10px;">
+                    <button id="receipt-process-btn" type="button" class="btn btn-primary" disabled>
+                    <i class="fas fa-magic"></i> Baca Struk (AI)
+                    </button>
+                    <button id="receipt-clear-btn" type="button" class="btn btn-light" disabled>
+                    <i class="fas fa-times"></i> Reset
+                    </button>
+                </div>
+
+                <div id="receipt-preview" style="margin-top:10px;"></div>
+                <div id="receipt-result" style="margin-top:10px;"></div>
+                </div>
 
                 <!-- Manual Input Section -->
                 <section id="manual" class="content-section">
@@ -362,7 +428,7 @@
                         </div>
                     </div>
                     
-                    <div class="table-container">
+                    <div class="table-container table-scroll">
                         <table id="expense-table">
                             <thead>
                                 <tr>
@@ -385,10 +451,23 @@
                         </table>
                     </div>
                     
-                    <div class="pagination">
-                        <button id="prev-page" disabled><i class="fas fa-chevron-left"></i></button>
-                        <span id="page-info">Halaman 1 dari 1</span>
-                        <button id="next-page" disabled><i class="fas fa-chevron-right"></i></button>
+                    <div class="data-table-footer">
+                    <div class="table-tools">
+                        <label class="table-tool">
+                        Tampil
+                        <select id="data-page-size" class="table-select">
+                            <option value="20" selected>20</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                            <option value="1000">1000</option>
+                        </select>
+                        data
+                        </label>
+                    </div>
+
+                    <div class="pagination" id="data-pagination"></div>
+
+                    <div class="page-info" id="page-info">Halaman 1 dari 1</div>
                     </div>
                 </section>
 
@@ -499,6 +578,81 @@
         <div class="loading-spinner"></div>
         <p>Memproses...</p>
     </div>
+
+    <script>
+        (function(){
+        const THEME_KEY = 'expense_tracker_theme_v1';
+        const root = document.documentElement; // <html data-theme="...">
+        const btn = document.getElementById('theme-toggle');
+
+        function getPreferredTheme(){
+            return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+            ? 'dark'
+            : 'light';
+        }
+
+        function setButtonUI(theme){
+            if(!btn) return;
+            const icon = btn.querySelector('i');
+            const label = btn.querySelector('span');
+            const isDark = theme === 'dark';
+
+            if(icon){
+            icon.className = isDark ? 'fas fa-sun' : 'fas fa-moon';
+            }
+            if(label){
+            label.textContent = isDark ? 'Light' : 'Dark';
+            }
+            btn.setAttribute('aria-label', isDark ? 'Ubah ke Light Mode' : 'Ubah ke Dark Mode');
+        }
+
+        function applyTheme(theme, save=true){
+            const t = (theme === 'dark') ? 'dark' : 'light';
+            root.setAttribute('data-theme', t);
+            setButtonUI(t);
+
+            if(save){
+            try { localStorage.setItem(THEME_KEY, t); } catch(e) {}
+            root.setAttribute('data-theme-user', '1'); // penanda user pernah memilih
+            }
+
+            // Optional: broadcast supaya script.js bisa ikut update warna chart jika dibutuhkan
+            window.dispatchEvent(new CustomEvent('themechange', { detail: { theme: t }}));
+        }
+
+        function initTheme(){
+            let saved = null;
+            try { saved = localStorage.getItem(THEME_KEY); } catch(e) {}
+            const theme = (saved === 'dark' || saved === 'light') ? saved : getPreferredTheme();
+            applyTheme(theme, false);
+            if(saved === 'dark' || saved === 'light') root.setAttribute('data-theme-user', '1');
+        }
+
+        // init
+        initTheme();
+
+        // klik toggle
+        if(btn){
+            btn.addEventListener('click', () => {
+            const cur = root.getAttribute('data-theme') || 'light';
+            applyTheme(cur === 'dark' ? 'light' : 'dark', true);
+            });
+        }
+
+        // kalau user belum pernah memilih, ikut perubahan sistem
+        if(window.matchMedia){
+            const mq = window.matchMedia('(prefers-color-scheme: dark)');
+            const onChange = () => {
+            const userPicked = root.getAttribute('data-theme-user') === '1';
+            if(userPicked) return;
+            applyTheme(getPreferredTheme(), false);
+            };
+
+            if(typeof mq.addEventListener === 'function') mq.addEventListener('change', onChange);
+            else if(typeof mq.addListener === 'function') mq.addListener(onChange);
+        }
+        })();
+        </script>
 
     <script src="script.js"></script>
 </body>
