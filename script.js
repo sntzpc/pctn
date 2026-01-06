@@ -497,6 +497,76 @@ function populateCategorySelect(selectEl, { includeAll=false, allLabel='Semua', 
   }
 }
 
+// ==============================
+// YEAR FILTER (DINAMIS)
+// ==============================
+function getYearFromExpense_(expense){
+  const iso = normalizeToISODate(expense?.tanggal);
+  if (!iso) return null;
+  const y = Number(iso.slice(0, 4));
+  return Number.isFinite(y) ? y : null;
+}
+
+function buildAvailableYears_(){
+  const years = new Set();
+  (appState.expenses || []).forEach(e => {
+    const y = getYearFromExpense_(e);
+    if (y) years.add(y);
+  });
+
+  const arr = Array.from(years).sort((a,b) => b - a); // terbaru -> lama
+  return arr;
+}
+
+/**
+ * Isi dropdown tahun berdasarkan data.
+ * - includeAll: tampilkan opsi "Semua Tahun"
+ * - preferYear: tahun yang diutamakan untuk dipilih (mis. tahun sekarang)
+ */
+function populateYearSelect(selectEl, { includeAll=true, allLabel='Semua Tahun', preferYear=null } = {}){
+  if (!selectEl) return;
+
+  const years = buildAvailableYears_();
+  const prev = selectEl.value;
+
+  const opts = [];
+  if (includeAll) opts.push({ value: 'all', label: allLabel });
+
+  years.forEach(y => opts.push({ value: String(y), label: String(y) }));
+
+  // kalau belum ada data sama sekali, minimal tampilkan tahun sekarang
+  if (years.length === 0) {
+    const yNow = String(new Date().getFullYear());
+    opts.push({ value: yNow, label: yNow });
+  }
+
+  selectEl.innerHTML = opts
+    .map(o => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`)
+    .join('');
+
+  // Tentukan value yang dipilih:
+  // 1) kalau preferYear ada dan tersedia → pilih itu
+  // 2) else kalau prev masih ada → pertahankan
+  // 3) else pilih tahun terbaru (atau 'all' kalau tidak ada)
+  const prefer = preferYear != null ? String(preferYear) : null;
+  const hasPrefer = prefer && opts.some(o => o.value === prefer);
+  const hasPrev = opts.some(o => o.value === prev);
+
+  if (hasPrefer) selectEl.value = prefer;
+  else if (hasPrev) selectEl.value = prev;
+  else {
+    // default: kalau ada years -> pilih newest, kalau tidak -> all
+    const newest = years.length ? String(years[0]) : (includeAll ? 'all' : opts[0]?.value);
+    selectEl.value = newest || (includeAll ? 'all' : '');
+  }
+}
+
+function refreshYearFilterOptions_(){
+  // default pilih tahun sekarang jika ada, kalau tidak pilih tahun terbaru dari data
+  const yNow = new Date().getFullYear();
+  populateYearSelect(domElements.filterYear, { includeAll:true, allLabel:'Semua Tahun', preferYear:yNow });
+}
+
 /**
  * Load master data: categories + category_rules
  * - online: ambil dari GAS (getCategories + getCategoryRules) lalu cache localStorage
@@ -1427,6 +1497,8 @@ function applySavedExpenseToState(saved) {
   sortStateExpensesDesc();
   appState.currentPageIndex = 1;
 
+  refreshYearFilterOptions_();
+
   // render UI langsung
   updateDashboard();
   updateMonthSummary();
@@ -1474,6 +1546,7 @@ async function loadData() {
 
     appState.expenses = data;
     appState.filteredExpenses = [...data];
+    refreshYearFilterOptions_();
 
     sortStateExpensesDesc();
     appState.currentPageIndex = 1;
@@ -2279,7 +2352,7 @@ function applyFilters() {
     const expenseYear  = d.getFullYear();
 
     if (month !== 'all' && Number(month) !== expenseMonth) return false;
-    if (year && Number(year) !== expenseYear) return false;
+    if (year !== 'all' && year && Number(year) !== expenseYear) return false;
     if (category !== 'all' && String(expense.kategori) !== String(category)) return false;
 
     return true;
@@ -2295,12 +2368,7 @@ function resetFilters() {
   domElements.filterMonth.value = 'all';
 
   // pilih year yang tersedia di dropdown (kalau ada), fallback tetap tahun sekarang
-  const yNow = String(new Date().getFullYear());
-  const yearSelect = domElements.filterYear;
-  if (yearSelect) {
-    const hasNow = Array.from(yearSelect.options || []).some(o => o.value === yNow);
-    yearSelect.value = hasNow ? yNow : (yearSelect.options?.[0]?.value || yNow);
-  }
+  refreshYearFilterOptions_();
 
   domElements.filterCategory.value = 'all';
 
