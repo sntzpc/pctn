@@ -1388,3 +1388,127 @@ canvas {
     height: 260px !important;
   }
 }
+
+/* =========================================================
+   PATCH: DARK MODE CONTRAST IMPROVEMENTS
+   Letakkan di PALING BAWAH style.css
+   ========================================================= */
+
+/* 1) Naikkan kontras surface-2 agar panel terlihat jelas */
+html[data-theme="dark"]{
+  --bg: #0b1220;           /* sedikit lebih gelap dari sebelumnya */
+  --surface: #0f172a;      /* panel utama */
+  --surface-2: #162235;    /* panel sekunder (lebih terang dari surface) */
+  --text: #e5e7eb;
+  --muted: #cbd5e1;        /* naikkan kontras muted (lebih terang) */
+  --border: #2a3a55;
+  --border-2: #3a516f;
+}
+
+/* 2) Voice recorder: teks status & card agar tidak pudar */
+html[data-theme] .voice-recorder{
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+html[data-theme] .recorder-status p{
+  color: var(--text);
+  font-weight: 600;
+  opacity: 1;               /* pastikan tidak pudar */
+}
+
+html[data-theme] .recorder-status i{
+  color: var(--muted);       /* mic icon jelas */
+}
+
+/* Saat recording/processing, pastikan label tetap jelas */
+html[data-theme] .recorder-status.recording p,
+html[data-theme] .recorder-status.processing p,
+html[data-theme] .recorder-status.success p{
+  color: var(--text);
+}
+
+/* Audio preview box kontras */
+html[data-theme] .audio-preview{
+  background: var(--surface);
+  border-color: var(--border-2);
+  color: var(--text);
+}
+
+/* Optional: disabled button agar tetap terbaca di dark */
+html[data-theme="dark"] button:disabled{
+  filter: grayscale(10%);
+  opacity: .65;
+}
+
+/* 3) OUTPUT AI (Voice & Receipt): table/pre/code agar kontras di dark */
+html[data-theme] #transcription-result,
+html[data-theme] #receipt-result{
+  color: var(--text);
+}
+
+/* Jika AI menghasilkan <table> di dalam hasil */
+html[data-theme] #transcription-result table,
+html[data-theme] #receipt-result table{
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+html[data-theme] #transcription-result thead tr,
+html[data-theme] #receipt-result thead tr{
+  background: var(--surface-2);
+}
+
+html[data-theme] #transcription-result th,
+html[data-theme] #receipt-result th{
+  color: var(--text);
+  font-weight: 700;
+  padding: 10px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+html[data-theme] #transcription-result td,
+html[data-theme] #receipt-result td{
+  color: var(--text);
+  padding: 10px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+html[data-theme="dark"] #transcription-result tbody tr:hover,
+html[data-theme="dark"] #receipt-result tbody tr:hover{
+  background: rgba(255,255,255,0.05);
+}
+
+/* Jika AI menghasilkan <pre><code> (kadang untuk JSON/teks mentah) */
+html[data-theme] #transcription-result pre,
+html[data-theme] #receipt-result pre{
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  overflow: auto;
+}
+
+html[data-theme] #transcription-result code,
+html[data-theme] #receipt-result code{
+  color: #ffd166; /* highlight ringan, terbaca di dark */
+}
+
+/* 4) Select / input lebih jelas di dark */
+html[data-theme="dark"] .table-select,
+html[data-theme="dark"] .chart-select,
+html[data-theme="dark"] .filter-group select{
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border-2);
+}
+
+html[data-theme="dark"] .table-tool{
+  color: var(--muted);
+}
+

@@ -5,6 +5,10 @@ const CONFIG = {
 
   // Cache lokal (tetap berguna untuk fallback offline)
   STORAGE_KEY: 'expense_tracker_cache_v1',
+  // Cache lokal master data
+  MASTER_CATEGORIES_KEY : 'expense_tracker_master_categories_v1',
+  MASTER_CATEGORY_RULES_KEY : 'expense_tracker_master_category_rules_v1',
+
 
   // Format mata uang
   CURRENCY_FORMAT: {
@@ -32,6 +36,10 @@ let appState = {
     recentItemsPerPage: 20,
     audioRecorder: null,
     audioChunks: [],
+    // Master data
+    categories: [],        // dari sheet 'categories'
+    categoryRules: [],     // dari sheet 'category_rules'
+    _ruleCompiled: null,   // cache regex compiled
     receiptImageBlob: null,
     receiptLastParsed: null,   // { merchant, date, items[], total, ... }
     receiptSelected: [],       // items terpilih yang akan disimpan
@@ -47,10 +55,15 @@ let domElements = {};
 
 // Inisialisasi Aplikasi
 document.addEventListener('DOMContentLoaded', function() {
-    initializeApp();
+  initializeApp();
+  setupEventListeners();
+  setupCharts();
+
+  // ✅ load master dulu (kategori + rules)
+  loadMasters().finally(() => {
+    // lalu load transaksi
     loadData();
-    setupEventListeners();
-    setupCharts();
+  });
 });
 
 // Fungsi Inisialisasi
@@ -433,47 +446,144 @@ async function apiGet(action, params = {}) {
   return json;
 }
 
+function safeParseJSON_(s, def){
+  try { return JSON.parse(s); } catch { return def; }
+}
+
+function getActiveCategoryNames_(){
+  const arr = Array.isArray(appState.categories) ? appState.categories : [];
+  const active = arr.filter(x => x && x.aktif !== false && String(x.kategori||'').trim());
+  // urut by urutan sudah dari server, tapi aman
+  return active.map(x => String(x.kategori).trim());
+}
+
+function ensureCategoryExists_(cat){
+  const names = getActiveCategoryNames_();
+  if (!cat) return 'Lainnya';
+  return names.includes(cat) ? cat : 'Lainnya';
+}
+
+function populateCategorySelect(selectEl, { includeAll=false, allLabel='Semua', value=null } = {}){
+  if (!selectEl) return;
+
+  const names = getActiveCategoryNames_();
+  const opts = [];
+
+  if (includeAll) {
+    opts.push({ value:'all', label: allLabel });
+  }
+
+  names.forEach(k => opts.push({ value:k, label:k }));
+
+  // pastikan 'Lainnya' ada
+  if (!names.includes('Lainnya')) {
+    opts.push({ value:'Lainnya', label:'Lainnya' });
+  }
+
+  selectEl.innerHTML = opts.map(o => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join('');
+
+  // set default value
+  if (value != null) {
+    const want = String(value);
+    const has = opts.some(o => o.value === want);
+    selectEl.value = has ? want : (includeAll ? 'all' : (names[0] || 'Lainnya'));
+  } else {
+    // jika sebelumnya sudah ada value dan masih valid, pertahankan
+    const prev = selectEl.value;
+    const hasPrev = opts.some(o => o.value === prev);
+    if (!hasPrev) {
+      selectEl.value = includeAll ? 'all' : (names[0] || 'Lainnya');
+    }
+  }
+}
+
+/**
+ * Load master data: categories + category_rules
+ * - online: ambil dari GAS (getCategories + getCategoryRules) lalu cache localStorage
+ * - offline: pakai cache localStorage
+ */
+async function loadMasters(){
+  // 1) coba baca cache dulu (agar UI cepat)
+  const catCache = safeParseJSON_(localStorage.getItem(CONFIG.MASTER_CATEGORIES_KEY) || '[]', []);
+  const ruleCache = safeParseJSON_(localStorage.getItem(CONFIG.MASTER_CATEGORY_RULES_KEY) || '[]', []);
+
+  if (Array.isArray(catCache) && catCache.length) appState.categories = catCache;
+  if (Array.isArray(ruleCache) && ruleCache.length) appState.categoryRules = ruleCache;
+
+  // 2) coba refresh dari server (kalau gagal, tetap pakai cache)
+  try {
+    const catRes = await apiGet('getCategories');
+    const cats = Array.isArray(catRes.data) ? catRes.data : [];
+    appState.categories = cats;
+    localStorage.setItem(CONFIG.MASTER_CATEGORIES_KEY, JSON.stringify(cats));
+  } catch (e) {
+    console.warn('getCategories gagal, pakai cache:', e.message);
+  }
+
+  try {
+    const ruleRes = await apiGet('getCategoryRules');
+    const rules = Array.isArray(ruleRes.data) ? ruleRes.data : [];
+    appState.categoryRules = rules;
+    localStorage.setItem(CONFIG.MASTER_CATEGORY_RULES_KEY, JSON.stringify(rules));
+  } catch (e) {
+    console.warn('getCategoryRules gagal, pakai cache:', e.message);
+  }
+
+  // reset compiled rules (biar rebuild)
+  appState._ruleCompiled = null;
+
+  // 3) update dropdown UI
+  // form voice
+  populateCategorySelect(domElements.itemCategory, { includeAll:false });
+  // form manual
+  populateCategorySelect(domElements.manualItemCategory, { includeAll:false });
+  // filter tabel
+  populateCategorySelect(domElements.filterCategory, { includeAll:true, allLabel:'Semua', value:'all' });
+  // export
+  populateCategorySelect(domElements.exportCategory, { includeAll:true, allLabel:'Semua', value:'all' });
+
+  // default field (jika kosong)
+  if (domElements.itemCategory && !domElements.itemCategory.value) domElements.itemCategory.value = ensureCategoryExists_('Lainnya');
+  if (domElements.manualItemCategory && !domElements.manualItemCategory.value) domElements.manualItemCategory.value = ensureCategoryExists_('Lainnya');
+}
+
 // Fungsi untuk mengurai angka dari teks (misal: "23 juta 500 ribu" -> 23500000)
 function parsePriceFromText(text) {
-    if (!text) return 0;
-    
-    // Cek apakah teks sudah berupa angka
-    const numericMatch = text.match(/(\d+(?:\.\d+)?)/g);
-    if (numericMatch) {
-        // Gabungkan semua angka yang ditemukan
-        const numericString = numericMatch.join('');
-        return parseInt(numericString.replace(/\./g, ''));
+  if (!text) return 0;
+
+  const raw = String(text).trim();
+  const textLower = raw.toLowerCase();
+
+  // Jika mengandung kata skala, pakai jalur juta/ribu/ratus (jangan jalur numericMatch)
+  const hasScaleWord = /\b(juta|ribu|ratus)\b/i.test(textLower);
+
+  // Jalur angka murni (mis: "23500000" / "23.500.000" / "23,500,000")
+  if (!hasScaleWord) {
+    const cleaned = raw.replace(/[^\d]/g, '');
+    if (cleaned && cleaned.length >= 4) { // >=4 biar "23" tidak dianggap harga
+      return parseInt(cleaned, 10) || 0;
     }
-    
-    // Untuk teks seperti "23 juta 500 ribu"
-    let total = 0;
-    const textLower = text.toLowerCase();
-    
-    // Jutaan
-    const jutaMatch = textLower.match(/(\d+(?:\.\d+)?)\s*juta/);
-    if (jutaMatch) {
-        total += parseFloat(jutaMatch[1].replace(/\./g, '')) * 1000000;
-    }
-    
-    // Ribuan
-    const ribuMatch = textLower.match(/(\d+(?:\.\d+)?)\s*ribu/);
-    if (ribuMatch) {
-        total += parseFloat(ribuMatch[1].replace(/\./g, '')) * 1000;
-    }
-    
-    // Ratusan
-    const ratusMatch = textLower.match(/(\d+(?:\.\d+)?)\s*ratus/);
-    if (ratusMatch) {
-        total += parseFloat(ratusMatch[1].replace(/\./g, '')) * 100;
-    }
-    
-    // Satuan
-    const satuanMatch = textLower.match(/(\d+(?:\.\d+)?)\s*rupiah/);
-    if (satuanMatch) {
-        total += parseFloat(satuanMatch[1].replace(/\./g, ''));
-    }
-    
-    return total;
+  }
+
+  // Jalur teks skala: "23 juta 500 ribu"
+  let total = 0;
+
+  const jutaMatch = textLower.match(/(\d+(?:[.,]\d+)?)\s*juta/);
+  if (jutaMatch) total += parseFloat(jutaMatch[1].replace(',', '.')) * 1_000_000;
+
+  const ribuMatch = textLower.match(/(\d+(?:[.,]\d+)?)\s*ribu/);
+  if (ribuMatch) total += parseFloat(ribuMatch[1].replace(',', '.')) * 1_000;
+
+  const ratusMatch = textLower.match(/(\d+(?:[.,]\d+)?)\s*ratus/);
+  if (ratusMatch) total += parseFloat(ratusMatch[1].replace(',', '.')) * 100;
+
+  // fallback: kalau ada angka kecil tanpa skala
+  if (!total) {
+    const cleaned = raw.replace(/[^\d]/g, '');
+    total = parseInt(cleaned || '0', 10) || 0;
+  }
+
+  return Math.round(total);
 }
 
 // Fungsi untuk memproses transkripsi teks dan mengisi form
@@ -756,39 +866,82 @@ function asNumber(v, def = 0){
   return Number.isFinite(n) ? n : def;
 }
 
-function guessCategoryFromText(name){
-  const s = String(name || '')
+function escapeRegex_(s){
+  return String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function compileCategoryRules_(){
+  if (appState._ruleCompiled) return appState._ruleCompiled;
+
+  const rules = Array.isArray(appState.categoryRules) ? appState.categoryRules : [];
+  const compiled = [];
+
+  for (const r of rules) {
+    if (!r) continue;
+    const aktif = (r.aktif !== false); // default true
+    if (!aktif) continue;
+
+    const kategori = String(r.kategori || '').trim();
+    const keywords = String(r.keywords || '').trim();
+    if (!kategori || !keywords) continue;
+
+    const mode = String(r.mode || 'contains').trim().toLowerCase();
+    const order = Number(r.urutan || 0);
+
+    let pattern = '';
+    if (mode === 'regex') {
+      // gunakan regex apa adanya (lebih kuat tapi rawan salah tulis)
+      pattern = keywords;
+    } else {
+      // contains: keyword dianggap literal (aman)
+      // keywords dipisah '|' lalu di-escape lalu digabung lagi
+      const parts = keywords
+        .split('|')
+        .map(x => x.trim())
+        .filter(Boolean)
+        .map(escapeRegex_);
+      if (!parts.length) continue;
+      pattern = parts.join('|');
+    }
+
+    // compile regex (case-insensitive)
+    let re = null;
+    try {
+      re = new RegExp(`(?:${pattern})`, 'i');
+    } catch (e) {
+      console.warn('Rule regex invalid, skip:', { kategori, pattern, err: e.message });
+      continue;
+    }
+
+    compiled.push({ kategori, order, re });
+  }
+
+  // urut prioritas
+  compiled.sort((a,b) => (a.order - b.order));
+
+  appState._ruleCompiled = compiled;
+  return compiled;
+}
+
+function normalizeItemText_(name){
+  return String(name || '')
     .toLowerCase()
-    .replace(/\s+/g, ' ') // rapikan spasi OCR
+    .replace(/\s+/g, ' ')
     .trim();
+}
 
-  // Makanan & Minuman
-  if (/(kopi|teh|susu|minuman|snack|fries|nugget|racik|santan|sapi|tahu|tempe|makan|restoran|warung|nasi|mie|bakso|soto|ayam|daging|ikan|buah|sayur|beras|gula|telur|bumbu|kecap|saos|keripik|cokelat|roti|kue|martabak|donat|alfamart|indomaret|supermarket|minimarket)/.test(s))
-    return 'Makanan & Minuman';
+function guessCategoryFromText(name){
+  const s = normalizeItemText_(name);
+  if (!s) return 'Lainnya';
 
-  // Transportasi
-  if (/(bensin|pertalite|pertamax|solar|bbm|spbu|parkir|tol|grab|gojek|ojek|taxi|taksi|commuter|krl|mrt|lrt|bus|angkot)/.test(s))
-    return 'Transportasi';
+  const rules = compileCategoryRules_();
 
-  // Rumah Tangga
-  if (/(sabun|sampo|deterjen|pembersih|tisu|pewangi|sikat gigi|pasta gigi|odol|gas|elpiji|galon|listrik|pln|pdam|air|kebersihan)/.test(s))
-    return 'Rumah Tangga';
-
-  // Kesehatan
-  if (/(obat|apotek|vitamin|suplemen|masker|hand sanitizer|alkohol|disinfektan|rumah sakit|klinik|dokter|bpjs|kesehatan)/.test(s))
-    return 'Kesehatan';
-
-  // Pakaian & Aksesoris
-  if (/(baju|celana|kaos|kemeja|jaket|sepatu|tas|dompet|aksesoris|jam tangan|topi|sunglasses|fashion|beli baju)/.test(s))
-    return 'Pakaian & Aksesoris';
-
-  // Elektronik
-  if (/(handphone|hp|smartphone|laptop|komputer|pc|tablet|charger|kabel|earphone|headset|mouse|keyboard|monitor|tv|kamera|elektronik)/.test(s))
-    return 'Elektronik';
-
-  // Hiburan
-  if (/(netflix|spotify|youtube|disney|bioskop|nonton|film|game|playstation|steam|hobi|buku|komik|konser|tiket|nongkrong|cafe|karaoke)/.test(s))
-    return 'Hiburan';
+  for (const r of rules) {
+    if (r.re && r.re.test(s)) {
+      // pastikan kategori masih ada di master categories
+      return ensureCategoryExists_(r.kategori);
+    }
+  }
 
   return 'Lainnya';
 }
@@ -976,7 +1129,7 @@ async function saveSelectedReceiptItems(merchant, dateISO){
         merk: String(it.merk || '').trim(),
         harga_satuan: price,
         harga_total: lineTotal,
-        kategori: String(it.kategori || guessCategoryFromText(name) || 'Lainnya'),
+        kategori: ensureCategoryExists_(String(it.kategori || '').trim() || guessCategoryFromText(name) || 'Lainnya'),
         toko: String(merchant || '').trim(),
         transkripsi: '',
         source: 'receipt',
@@ -1203,7 +1356,7 @@ async function saveToBackend(data) {
       merk: data.brand || '',
       harga_satuan: data.price,
       harga_total: data.total,
-      kategori: data.category || 'Lainnya',
+      kategori: ensureCategoryExists_(data.category || guessCategoryFromText(data.itemName) || 'Lainnya'),
       toko: data.store || '',
       transkripsi: appState.lastTranscript || '',
       source: data.source || 'manual'
@@ -1283,22 +1436,24 @@ function applySavedExpenseToState(saved) {
 
 // Fungsi untuk membersihkan form voice input
 function clearVoiceInput() {
-    domElements.itemName.value = '';
-    domElements.itemQuantity.value = '';
-    domElements.itemUnit.value = '';
-    domElements.itemBrand.value = '';
-    domElements.itemPrice.value = '';
-    domElements.itemStore.value = '';
-    domElements.totalPrice.value = '';
-    domElements.itemCategory.value = 'Makanan & Minuman';
-    
-    domElements.audioPreview.innerHTML = '<p>Belum ada rekaman</p>';
-    domElements.transcriptionResult.innerHTML = '<p>Hasil transkripsi akan muncul di sini...</p>';
-    
-    domElements.processBtn.disabled = true;
-    appState.audioBlob = null;
-    
-    updateRecorderStatus('idle', 'Siap merekam');
+  domElements.itemName.value = '';
+  domElements.itemQuantity.value = '';
+  domElements.itemUnit.value = '';
+  domElements.itemBrand.value = '';
+  domElements.itemPrice.value = '';
+  domElements.itemStore.value = '';
+  domElements.totalPrice.value = '';
+
+  // ✅ aman: gunakan master yang valid
+  domElements.itemCategory.value = ensureCategoryExists_('Lainnya');
+
+  domElements.audioPreview.innerHTML = '<p>Belum ada rekaman</p>';
+  domElements.transcriptionResult.innerHTML = '<p>Hasil transkripsi akan muncul di sini...</p>';
+
+  domElements.processBtn.disabled = true;
+  appState.audioBlob = null;
+
+  updateRecorderStatus('idle', 'Siap merekam');
 }
 
 // Fungsi untuk memuat data dari backend/offline storage
@@ -1438,36 +1593,40 @@ function renderRecentTable(){
 
 // Fungsi untuk memperbarui ringkasan bulan
 function updateMonthSummary() {
-    const now = new Date();
-    const currentMonth = now.getMonth() + 1;
-    const currentYear = now.getFullYear();
-    
-    // Filter pengeluaran bulan ini
-    const monthlyExpenses = appState.expenses.filter(expense => {
-        const expenseDate = new Date(expense.tanggal);
-        return expenseDate.getMonth() + 1 === currentMonth && expenseDate.getFullYear() === currentYear;
-    });
-    
-    // Hitung total pengeluaran bulan ini
-    const monthTotal = monthlyExpenses.reduce((sum, expense) => sum + expense.harga_total, 0);
-    
-    // Hitung rata-rata per hari
-    const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
-    const monthAvg = monthTotal / daysInMonth;
-    
-    domElements.monthTotal.textContent = formatCurrency(monthTotal);
-    domElements.monthCount.textContent = monthlyExpenses.length;
-    domElements.monthAvg.textContent = formatCurrency(monthAvg);
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+
+  const monthlyExpenses = (appState.expenses || []).filter(expense => {
+    const d = parseISOToLocalDate(expense.tanggal);
+    if (!d) return false;
+    return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+  });
+
+  const monthTotal = monthlyExpenses.reduce((sum, e) => sum + (Number(e.harga_total) || 0), 0);
+  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+  const monthAvg = daysInMonth ? (monthTotal / daysInMonth) : 0;
+
+  domElements.monthTotal.textContent = formatCurrency(monthTotal);
+  domElements.monthCount.textContent = String(monthlyExpenses.length);
+  domElements.monthAvg.textContent = formatCurrency(monthAvg);
+}
+
+function parseISOToLocalDate(iso){
+  const s = normalizeToISODate(iso);
+  if (!s) return null;
+  return new Date(s + 'T00:00:00'); // paksa lokal
 }
 
 // Fungsi untuk memformat tanggal
 function formatDate(dateString) {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('id-ID', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric'
-    });
+  const d = parseISOToLocalDate(dateString);
+  if (!d) return '-';
+  return d.toLocaleDateString('id-ID', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric'
+  });
 }
 
 function pad2(n){ return String(n).padStart(2,'0'); }
@@ -2108,36 +2267,27 @@ function renderExpenseTable() {
 
 // Fungsi untuk menerapkan filter
 function applyFilters() {
-    const month = domElements.filterMonth.value;
-    const year = domElements.filterYear.value;
-    const category = domElements.filterCategory.value;
-    
-    appState.filteredExpenses = appState.expenses.filter(expense => {
-        const expenseDate = new Date(expense.tanggal);
-        const expenseMonth = expenseDate.getMonth() + 1;
-        const expenseYear = expenseDate.getFullYear();
-        
-        // Filter bulan
-        if (month !== 'all' && parseInt(month) !== expenseMonth) {
-            return false;
-        }
-        
-        // Filter tahun
-        if (parseInt(year) !== expenseYear) {
-            return false;
-        }
-        
-        // Filter kategori
-        if (category !== 'all' && expense.kategori !== category) {
-            return false;
-        }
-        
-        return true;
-    });
-    
-    appState.filteredExpenses.sort(compareExpenseDesc);
-    appState.currentPageIndex = 1;
-    renderExpenseTable();
+  const month = domElements.filterMonth.value; // 'all' atau angka string
+  const year  = domElements.filterYear.value;  // angka string
+  const category = domElements.filterCategory.value;
+
+  appState.filteredExpenses = (appState.expenses || []).filter(expense => {
+    const d = parseISOToLocalDate(expense.tanggal);
+    if (!d) return false;
+
+    const expenseMonth = d.getMonth() + 1;
+    const expenseYear  = d.getFullYear();
+
+    if (month !== 'all' && Number(month) !== expenseMonth) return false;
+    if (year && Number(year) !== expenseYear) return false;
+    if (category !== 'all' && String(expense.kategori) !== String(category)) return false;
+
+    return true;
+  });
+
+  appState.filteredExpenses.sort(compareExpenseDesc);
+  appState.currentPageIndex = 1;
+  renderExpenseTable();
 }
 
 // Fungsi untuk mereset filter
@@ -2374,6 +2524,10 @@ function exportAllData() {
 
 // Fungsi untuk export ke Excel
 function exportToExcel(data, filename) {
+    if (typeof XLSX === 'undefined') {
+    showToast('Library XLSX belum termuat. Pastikan SheetJS sudah diload.', 'error');
+    return;
+  }
     // Format data untuk Excel
     const excelData = data.map((expense, index) => ({
         'No': index + 1,
