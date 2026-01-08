@@ -460,7 +460,15 @@ function getActiveCategoryNames_(){
 function ensureCategoryExists_(cat){
   const names = getActiveCategoryNames_();
   if (!cat) return 'Lainnya';
-  return names.includes(cat) ? cat : 'Lainnya';
+
+  const want = String(cat).trim();
+  if (!want) return 'Lainnya';
+
+  // ✅ case-insensitive match agar tahan typo casing/spasi
+  const map = new Map(names.map(n => [String(n).trim().toLowerCase(), String(n).trim()]));
+  const hit = map.get(want.toLowerCase());
+
+  return hit ? hit : 'Lainnya';
 }
 
 function populateCategorySelect(selectEl, { includeAll=false, allLabel='Semua', value=null } = {}){
@@ -1283,7 +1291,7 @@ async function processAudio() {
       if (parsed.merk) domElements.itemBrand.value = parsed.merk;
       if (parsed.harga_satuan != null) domElements.itemPrice.value = parsed.harga_satuan;
       if (parsed.toko) domElements.itemStore.value = parsed.toko;
-      if (parsed.kategori) domElements.itemCategory.value = parsed.kategori;
+      if (parsed.kategori) domElements.itemCategory.value = ensureCategoryExists_(parsed.kategori);
     }
 
     // fallback regex lama untuk mengisi yang masih kosong
@@ -1517,7 +1525,7 @@ function clearVoiceInput() {
   domElements.totalPrice.value = '';
 
   // ✅ aman: gunakan master yang valid
-  domElements.itemCategory.value = ensureCategoryExists_('Lainnya');
+  domElements.itemCategory.value = ensureCategoryExists_(parsed.kategori || guessCategoryFromText(parsed.nama_barang || domElements.itemName.value) || 'Lainnya');
 
   domElements.audioPreview.innerHTML = '<p>Belum ada rekaman</p>';
   domElements.transcriptionResult.innerHTML = '<p>Hasil transkripsi akan muncul di sini...</p>';
